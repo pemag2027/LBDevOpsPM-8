@@ -120,7 +120,7 @@ resource "aws_lb_target_group" "main" {
   protocol = "HTTP"
   vpc_id   = data.aws_vpc.myvpc.id
   target_type = "ip"
-​  health_check {
+  health_check {
     path                = "/"
     interval            = 30
     timeout             = 5
