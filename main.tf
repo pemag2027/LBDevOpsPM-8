@@ -6,7 +6,7 @@ terraform {
       version = "~> 5.0"
     }
   }
-  
+ 
   backend "s3" {
     bucket = "fstate-744092294349-us-east-1"
     key    = "ecs-lekce7/terraform.tfstate"
@@ -17,90 +17,89 @@ terraform {
 provider "aws" {
   region = var.aws_region
 }
-​
+
 # Variables
 variable "aws_region" {
   default = "us-east-1"
 }
-​
+
 variable "project_name" {
   default = "lekce7-ecs"
 }
-​
+
 # Data sources
 data "aws_availability_zones" "available" {
   state = "available"
 }
-​
 
 data "aws_vpc" "myvpc" {
-​
+
   default = true
 }
-​
+
 data "aws_subnets" "albsubnets" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.myvpc.id]
   }
 }
-​
+
 data "aws_subnets" "ecssubnets" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.myvpc.id]
   }
 }
-​
+
 # Security Groups
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg"
   description = "Security group for ALB"
   vpc_id      = data.aws_vpc.myvpc.id
-  
+ 
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-  
+ 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-  
+ 
   tags = {
     Name = "${var.project_name}-alb-sg"
   }
 }
-​
+
 resource "aws_security_group" "ecs_tasks" {
   name        = "${var.project_name}-ecs-tasks-sg"
   description = "Security group for ECS tasks"
   vpc_id      = data.aws_vpc.myvpc.id
-  
+ 
   ingress {
     from_port       = 80
     to_port         = 80
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
-  
+ 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-  
+ 
   tags = {
     Name = "${var.project_name}-ecs-tasks-sg"
   }
 }
-​
+
 # Application Load Balancer
 # Application Load Balancer
 resource "aws_lb" "main" {
@@ -114,7 +113,7 @@ resource "aws_lb" "main" {
     Name = "${var.project_name}-alb"
   }
 }
-​
+
 resource "aws_lb_target_group" "main" {
   name     = "${var.project_name}-tg"
   port     = 80
@@ -129,36 +128,36 @@ resource "aws_lb_target_group" "main" {
     healthy_threshold   = 2
     unhealthy_threshold = 2
   }
-​
+
   tags = {
     Name = "${var.project_name}-tg"
   }
 }
-​
+
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
   protocol          = "HTTP"
-​
+
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.main.arn
   }
 }
-​
-​
+
+
 # ecs
 resource "aws_ecs_cluster" "lesson7" {
   name = "lesson7"
 }
-​
+
 resource "aws_ecs_task_definition" "lesson7" {
   family                   = "lesson7"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "256"
   memory                   = "512"
-​
+
   container_definitions = jsonencode([
     {
       name      = "web"
@@ -173,36 +172,36 @@ resource "aws_ecs_task_definition" "lesson7" {
     }
   ])
 }
-​
+
 resource "aws_ecs_service" "lesson7" {
   name            = "lesson7"
   cluster        = aws_ecs_cluster.lesson7.id
   task_definition = aws_ecs_task_definition.lesson7.arn
   desired_count   = 1
-​
+
   launch_type = "FARGATE"
-​
+
   network_configuration {
     subnets          = [data.aws_subnets.ecssubnets.ids[0], data.aws_subnets.ecssubnets.ids[1]]
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = true
   }
-​
+
     load_balancer {
         target_group_arn = aws_lb_target_group.main.arn
         container_name   = "web"
         container_port   = 80
     }
 }
-​
-​
+
+
 resource "aws_lb_target_group" "nginx" {
   name        = "\${var.project_name}-tg"
   port        = 80
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
   target_type = "ip"
-  
+ 
   health_check {
     enabled             = true
     healthy_threshold   = 2
@@ -212,41 +211,41 @@ resource "aws_lb_target_group" "nginx" {
     path                = "/"
     matcher             = "200"
   }
-  
+ 
   tags = {
     Name = "\${var.project_name}-tg"
   }
 }
-​
+
 resource "aws_lb_listener" "nginx" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
   protocol          = "HTTP"
-  
+ 
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.nginx.arn
   }
 }
-​
+
 # ECS Cluster
 resource "aws_ecs_cluster" "main" {
   name = "\${var.project_name}-cluster"
-  
+ 
   setting {
     name  = "containerInsights"
     value = "enabled"
   }
-  
+ 
   tags = {
     Name = "\${var.project_name}-cluster"
   }
 }
-​
+
 # IAM Role for ECS Task Execution
 resource "aws_iam_role" "ecs_task_execution_role" {
   name = "\${var.project_name}-ecs-task-execution-role"
-  
+ 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -260,22 +259,22 @@ resource "aws_iam_role" "ecs_task_execution_role" {
     ]
   })
 }
-​
+
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   role       = aws_iam_role.ecs_task_execution_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
-​
+
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "nginx" {
   name              = "/ecs/\${var.project_name}"
   retention_in_days = 7
-  
+ 
   tags = {
     Name = "\${var.project_name}-logs"
   }
 }
-​
+
 # ECS Task Definition
 resource "aws_ecs_task_definition" "nginx" {
   family                   = "\${var.project_name}-task"
@@ -284,19 +283,19 @@ resource "aws_ecs_task_definition" "nginx" {
   cpu                      = "256"
   memory                   = "512"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
-  
+ 
   container_definitions = jsonencode([
     {
       name  = "nginx"
       image = "nginx:alpine"
-      
+     
       portMappings = [
         {
           containerPort = 80
           protocol      = "tcp"
         }
       ]
-      
+     
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -305,16 +304,16 @@ resource "aws_ecs_task_definition" "nginx" {
           "awslogs-stream-prefix" = "ecs"
         }
       }
-      
+     
       essential = true
     }
   ])
-  
+ 
   tags = {
     Name = "\${var.project_name}-task"
   }
 }
-​
+
 # ECS Service
 resource "aws_ecs_service" "nginx" {
   name            = "\${var.project_name}-service"
@@ -322,32 +321,32 @@ resource "aws_ecs_service" "nginx" {
   task_definition = aws_ecs_task_definition.nginx.arn
   desired_count   = 1
   launch_type     = "FARGATE"
-  
+ 
   network_configuration {
     subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = true
   }
-  
+ 
   load_balancer {
     target_group_arn = aws_lb_target_group.nginx.arn
     container_name   = "nginx"
     container_port   = 80
   }
-  
+ 
   depends_on = [aws_lb_listener.nginx]
-  
+ 
   tags = {
     Name = "\${var.project_name}-service"
   }
 }
-​
+
 # Outputs
 output "load_balancer_dns" {
   description = "DNS name of the load balancer"
   value       = aws_lb.main.dns_name
 }
-​
+
 output "load_balancer_url" {
   description = "URL of the load balancer"
   value       = "http://\${aws_lb.main.dns_name}"
