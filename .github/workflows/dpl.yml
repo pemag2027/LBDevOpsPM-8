@@ -1,3 +1,4 @@
+name: Deploy ECS Infra
 on:
   push:
     branches: [main]
